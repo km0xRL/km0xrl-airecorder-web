@@ -74,6 +74,8 @@ export interface Recording {
   recordedAtMs: number | null;
   durationS: number | null;
   tags: string[];
+  tagsEdited: boolean;
+  voiceNamed: string[];
   speakerNames: Record<string, string>;
   speakerOverrides: Record<string, string>;
   transcript: Transcript | null;
@@ -81,6 +83,7 @@ export interface Recording {
   marks: Mark[];
   hints: Hint[];
   audio: AudioInfo | null;
+  seq: number;
   createdAtMs: number;
   updatedAtMs: number;
   deletedAtMs: number | null;

@@ -25,6 +25,9 @@ export interface RecordingRow {
   audio_size: number | null;
   audio_sha256: string | null;
   audio_name: string | null;
+  tags_edited: number;
+  voice_named_json: string;
+  seq: number;
   search_text: string;
   created_at_ms: number;
   updated_at_ms: number;
@@ -51,9 +54,9 @@ const globalForDb = globalThis as typeof globalThis & { __airRecorderDb?: Db };
 function migrate(db: Db): void {
   const versionRow = db.prepare("PRAGMA user_version").get() as { user_version?: number } | undefined;
   const version = Number(versionRow?.user_version ?? 0);
-  if (version >= 1) return;
 
-  db.exec(`
+  if (version < 1) {
+    db.exec(`
     CREATE TABLE IF NOT EXISTS recordings (
       id TEXT PRIMARY KEY,
       client_id TEXT NOT NULL UNIQUE,
@@ -109,6 +112,32 @@ function migrate(db: Db): void {
 
     PRAGMA user_version = 1;
   `);
+  }
+
+  if (version < 2) {
+    db.exec(`
+      ALTER TABLE recordings ADD COLUMN tags_edited INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE recordings ADD COLUMN voice_named_json TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE recordings ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+      UPDATE recordings SET seq = rowid WHERE seq = 0;
+      CREATE INDEX IF NOT EXISTS idx_recordings_seq ON recordings(seq);
+      CREATE TABLE IF NOT EXISTS sync_state (
+        key TEXT PRIMARY KEY,
+        value INTEGER NOT NULL
+      );
+      INSERT OR IGNORE INTO sync_state(key, value)
+        SELECT 'seq', COALESCE(MAX(seq), 0) FROM recordings;
+      PRAGMA user_version = 2;
+    `);
+  }
+}
+
+export function nextSeq(db: Db): number {
+  db.prepare("UPDATE sync_state SET value = value + 1 WHERE key = 'seq'").run();
+  const row = db.prepare("SELECT value FROM sync_state WHERE key = 'seq'").get() as
+    | { value?: number }
+    | undefined;
+  return Number(row?.value ?? 1);
 }
 
 export function getDb(): Db {

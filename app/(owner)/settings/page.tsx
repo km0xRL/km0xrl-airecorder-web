@@ -258,6 +258,16 @@ export default async function SettingsPage() {
             description="Изменения после since (мс эпохи) — для синхронизации."
           />
           <Endpoint
+            method="GET"
+            path="/v1/library?since=0&limit=50"
+            description="Библиотека для Android/Mac: все поля, надгробия и seq."
+          />
+          <Endpoint
+            method="PUT"
+            path="/v1/library/{id}"
+            description="Версия записи из приложения; побеждает последняя правка, 409 — у сайта новее."
+          />
+          <Endpoint
             method="DELETE"
             path="/api/v1/recordings/{client_id}"
             description="Удалить запись и её аудио (мягкое удаление)."

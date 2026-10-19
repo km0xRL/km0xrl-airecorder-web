@@ -78,6 +78,23 @@ pnpm seed-demo    # добавит запись, расшифровку, отч�
 В `.env` значение `OWNER_PASSWORD_HASH` содержит `$`: заключите его в кавычки и экранируйте `$`
 как `\$`, либо задайте переменную прямо в панели Railway, где экранирование не нужно.
 
+## Полная синхронизация с Android и Mac
+
+Сайт — общая библиотека. Приложения синхронизируются с ним по протоколу Б14: `GET/PUT /v1/library`,
+курсор `seq`, надгробия, правило «побеждает последняя правка». Поля — все: название, теги, расшифровка,
+отчёт, имена и поправки говорящих, метки, подсказки, `tags_edited`, `voice_named`. После метаданных
+приложение отправляет аудио на `PUT /api/v1/recordings/{id}/audio`; сайт отдаёт его в плеере и ссылках.
+
+- **Android:** APK с вшитыми адресом сайта и токенами — `dist/airecorder-0.12.0-web-sync.apk`.
+  Адрес и токен сайта можно поменять в «Настройках» → «Синхронизация».
+- **Mac:** `dist/AIRecorder-0.2.0-web-sync.zip`. Токены вшиты в `Info.plist` при сборке.
+- Пересборка: `WEB_SYNC_TOKEN=… TRANSCRIBE_TOKEN=…` для Android — через Gradle, для Mac —
+  `WEB_SYNC_TOKEN=… TRANSCRIBE_TOKEN=… Scripts/bundle.sh`.
+
+Сервер сайта принимает библиотеку на `/v1/library` и `/health` с флагом `library: true` — это тот же
+контракт, что у сервиса расшифровки, поэтому приложения используют один и тот же клиент, но с адресом
+сайта. Аудио в `LibraryData` не входит и загружается отдельным запросом.
+
 ## API
 
 Полный контракт — [docs/API.md](docs/API.md). Коротко:
@@ -120,6 +137,9 @@ curl -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/recordings/rec_demo_001"
    ```
 
 4. Пропишите домен в Railway → Settings → Networking, затем обновите `PUBLIC_BASE_URL`.
+   Для `recorder.km0xrl.com` нужны DNS-записи, которые показывает Railway → Domains:
+   `CNAME recorder → <service>.up.railway.app` и TXT `_railway-verify.recorder` с токеном проверки.
+   Без них домен не откроется, хотя Railway-адрес уже работает.
 5. Проверьте `https://<домен>/api/v1/health` и вход в кабинет.
 
 На тарифе Pro включите бэкапы volume: Railway → сервис → Backups. SQLite лежит в

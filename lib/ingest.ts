@@ -85,7 +85,9 @@ const payloadSchema = z.object({
   recorded_at: z.string().max(100).optional(),
   duration_s: numberish.nullable().optional(),
   tags: z.array(z.string().max(200)).max(100).optional(),
+  tags_edited: z.boolean().optional(),
   tag_titles: z.record(z.string(), z.string().max(200)).optional(),
+  voice_named: z.array(z.string().max(200)).max(500).optional(),
   speaker_names: z.record(z.string().max(200), z.string().max(200)).optional(),
   speaker_overrides: z.record(z.string().max(50), z.string().max(200)).optional(),
   transcript: transcriptSchema.nullable().optional(),
@@ -116,6 +118,8 @@ export interface NormalizedIngest {
   recordedAtMs: number | null;
   durationS: number | null;
   tags: string[];
+  tagsEdited: boolean;
+  voiceNamed: string[];
   speakerNames: Record<string, string>;
   speakerOverrides: Record<string, string>;
   transcript: Transcript | null;
@@ -314,6 +318,8 @@ export function parseIngestPayload(clientId: string, body: unknown, now = Date.n
     recordedAtMs,
     durationS: raw.duration_s ?? transcript?.duration_s ?? null,
     tags,
+    tagsEdited: raw.tags_edited ?? false,
+    voiceNamed: raw.voice_named ? [...new Set(raw.voice_named.map((value) => value.trim()).filter(Boolean))] : [],
     speakerNames: raw.speaker_names ?? {},
     speakerOverrides: raw.speaker_overrides ?? {},
     transcript,

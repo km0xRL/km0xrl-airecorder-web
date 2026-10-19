@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getDb, inTransaction, type RecordingRow, type ShareRow } from "@/lib/db";
+import { getDb, inTransaction, nextSeq, type RecordingRow, type ShareRow } from "@/lib/db";
 import type { NormalizedIngest } from "@/lib/ingest";
 import { randomToken } from "@/lib/crypto";
 import type {
@@ -41,6 +41,8 @@ export function rowToRecording(row: RecordingRow): Recording {
     recordedAtMs: row.recorded_at_ms,
     durationS: row.duration_s,
     tags: parseJson<string[]>(row.tags_json, []),
+    tagsEdited: Boolean(row.tags_edited),
+    voiceNamed: parseJson<string[]>(row.voice_named_json, []),
     speakerNames: parseJson<Record<string, string>>(row.speaker_names_json, {}),
     speakerOverrides: parseJson<Record<string, string>>(row.speaker_overrides_json, {}),
     transcript: parseJson<Transcript | null>(row.transcript_json, null),
@@ -55,6 +57,7 @@ export function rowToRecording(row: RecordingRow): Recording {
           name: row.audio_name,
         }
       : null,
+    seq: Number(row.seq ?? 0),
     createdAtMs: row.created_at_ms,
     updatedAtMs: row.updated_at_ms,
     deletedAtMs: row.deleted_at_ms,
@@ -218,9 +221,11 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
       throw new Error("recording_not_found");
     }
     inTransaction(db, () => {
+      const seq = nextSeq(db);
+      const at = Math.max(now, input.updatedAtMs);
       db.prepare(
-        "UPDATE recordings SET deleted_at_ms = ?, updated_at_ms = ? WHERE id = ?",
-      ).run(now, Math.max(now, input.updatedAtMs), existing.id);
+        "UPDATE recordings SET deleted_at_ms = ?, updated_at_ms = ?, seq = ? WHERE id = ?",
+      ).run(at, at, seq, existing.id);
       db.prepare(
         "UPDATE share_links SET revoked_at_ms = ? WHERE recording_id = ? AND revoked_at_ms IS NULL",
       ).run(now, existing.id);
@@ -254,9 +259,10 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
       db.prepare(
         `UPDATE recordings SET
           title = ?, kind = ?, source_name = ?, origin_device = ?, model = ?,
-          recorded_at_ms = ?, duration_s = ?, tags_json = ?, speaker_names_json = ?,
+          recorded_at_ms = ?, duration_s = ?, tags_json = ?, tags_edited = ?,
+          voice_named_json = ?, speaker_names_json = ?,
           speaker_overrides_json = ?, transcript_json = ?, report_json = ?,
-          marks_json = ?, hints_json = ?, search_text = ?, updated_at_ms = ?,
+          marks_json = ?, hints_json = ?, search_text = ?, updated_at_ms = ?, seq = ?,
           deleted_at_ms = NULL
         WHERE id = ?`,
       ).run(
@@ -268,6 +274,8 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
         recordedAtMs,
         durationS,
         JSON.stringify(input.tags),
+        input.tagsEdited ? 1 : 0,
+        JSON.stringify(input.voiceNamed),
         JSON.stringify(speakerNames),
         JSON.stringify(speakerOverrides),
         transcript ? JSON.stringify(transcript) : null,
@@ -276,16 +284,17 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
         JSON.stringify(input.hints),
         searchText,
         Math.max(input.updatedAtMs, existing.updated_at_ms),
+        nextSeq(db),
         existing.id,
       );
     } else {
       db.prepare(
         `INSERT INTO recordings (
           id, client_id, title, kind, source_name, origin_device, model,
-          recorded_at_ms, duration_s, tags_json, speaker_names_json,
-          speaker_overrides_json, transcript_json, report_json, marks_json,
-          hints_json, search_text, created_at_ms, updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          recorded_at_ms, duration_s, tags_json, tags_edited, voice_named_json,
+          speaker_names_json, speaker_overrides_json, transcript_json, report_json,
+          marks_json, hints_json, search_text, created_at_ms, updated_at_ms, seq
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         randomUUID(),
         input.clientId,
@@ -297,6 +306,8 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
         recordedAtMs,
         durationS,
         JSON.stringify(input.tags),
+        input.tagsEdited ? 1 : 0,
+        JSON.stringify(input.voiceNamed),
         JSON.stringify(speakerNames),
         JSON.stringify(speakerOverrides),
         transcript ? JSON.stringify(transcript) : null,
@@ -306,6 +317,7 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
         searchText,
         now,
         input.updatedAtMs,
+        nextSeq(db),
       );
     }
   });
@@ -340,9 +352,18 @@ export function updateRecordingFields(
     .toLocaleLowerCase("ru-RU")
     .replace(/\s+/g, " ")
     .trim();
+  const tagsEdited = patch.tags !== undefined ? 1 : existing.tags_edited;
   db.prepare(
-    "UPDATE recordings SET title = ?, tags_json = ?, search_text = ?, updated_at_ms = ? WHERE id = ?",
-  ).run(title.slice(0, 300), JSON.stringify(tags.slice(0, 50)), searchText, Date.now(), id);
+    "UPDATE recordings SET title = ?, tags_json = ?, tags_edited = ?, search_text = ?, updated_at_ms = ?, seq = ? WHERE id = ?",
+  ).run(
+    title.slice(0, 300),
+    JSON.stringify(tags.slice(0, 50)),
+    tagsEdited,
+    searchText,
+    Date.now(),
+    nextSeq(db),
+    id,
+  );
   const row = db.prepare("SELECT * FROM recordings WHERE id = ?").get(id) as unknown as RecordingRow;
   return rowToRecording(row);
 }
@@ -366,7 +387,7 @@ export function setRecordingAudio(
   db.prepare(
     `UPDATE recordings SET
       audio_path = ?, audio_mime = ?, audio_size = ?, audio_sha256 = ?, audio_name = ?,
-      duration_s = COALESCE(?, duration_s), updated_at_ms = ?
+      duration_s = COALESCE(?, duration_s), updated_at_ms = ?, seq = ?
      WHERE id = ?`,
   ).run(
     audio.relativePath,
@@ -376,6 +397,7 @@ export function setRecordingAudio(
     audio.name,
     audio.durationS,
     Date.now(),
+    nextSeq(db),
     id,
   );
   return { previousPath: existing.audio_path };
@@ -388,20 +410,29 @@ export function clearRecordingAudio(id: string): string | null {
     | undefined;
   if (!existing) return null;
   db.prepare(
-    "UPDATE recordings SET audio_path = NULL, audio_mime = NULL, audio_size = NULL, audio_sha256 = NULL, audio_name = NULL, updated_at_ms = ? WHERE id = ?",
-  ).run(Date.now(), id);
+    "UPDATE recordings SET audio_path = NULL, audio_mime = NULL, audio_size = NULL, audio_sha256 = NULL, audio_name = NULL, updated_at_ms = ?, seq = ? WHERE id = ?",
+  ).run(Date.now(), nextSeq(db), id);
   return existing.audio_path;
 }
 
-export function softDeleteRecording(id: string): { found: boolean; audioPath: string | null } {
+export function softDeleteRecording(
+  id: string,
+  deletedAtMs = Date.now(),
+): { found: boolean; audioPath: string | null } {
   const db = getDb();
   const existing = db.prepare("SELECT audio_path FROM recordings WHERE id = ? AND deleted_at_ms IS NULL").get(id) as
     | Pick<RecordingRow, "audio_path">
     | undefined;
   if (!existing) return { found: false, audioPath: null };
   const now = Date.now();
+  const at = Math.max(now, deletedAtMs);
   inTransaction(db, () => {
-    db.prepare("UPDATE recordings SET deleted_at_ms = ?, updated_at_ms = ? WHERE id = ?").run(now, now, id);
+    db.prepare("UPDATE recordings SET deleted_at_ms = ?, updated_at_ms = ?, seq = ? WHERE id = ?").run(
+      at,
+      at,
+      nextSeq(db),
+      id,
+    );
     db.prepare(
       "UPDATE share_links SET revoked_at_ms = ? WHERE recording_id = ? AND revoked_at_ms IS NULL",
     ).run(now, id);
