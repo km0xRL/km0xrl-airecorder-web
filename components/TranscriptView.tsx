@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Highlighter, Search, X, LocateFixed, Mic2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Highlighter, Pencil, Search, X, LocateFixed, Mic2 } from "lucide-react";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
@@ -35,12 +36,20 @@ export function TranscriptView({
   segments,
   text,
   hasAudio,
+  canEdit = false,
+  recordingId,
+  speakerOverrides = {},
 }: {
   segments: DisplaySegment[];
   text: string | null;
   hasAudio: boolean;
+  canEdit?: boolean;
+  recordingId?: string;
+  speakerOverrides?: Record<string, string>;
 }) {
   const { activeIndex, playing, seekTo } = usePlayback();
+  const router = useRouter();
+  const [savingSpeaker, setSavingSpeaker] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [speaker, setSpeaker] = useState<string | null>(null);
   const [follow, setFollow] = useState(true);
@@ -48,6 +57,33 @@ export function TranscriptView({
 
   const speakers = useMemo(() => uniqueSpeakerNames(segments), [segments]);
   const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
+
+  const editSpeaker = async (segment: DisplaySegment) => {
+    if (!canEdit || !recordingId || savingSpeaker !== null) return;
+    const value = window.prompt(
+      "Имя говорящего для этой фразы. Пусто — имя как у всех.",
+      segment.name,
+    );
+    if (value === null) return;
+    const next = { ...speakerOverrides };
+    if (value.trim()) next[String(segment.index)] = value.trim();
+    else delete next[String(segment.index)];
+    setSavingSpeaker(segment.index);
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speaker_overrides: next }),
+      });
+      const data = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(data.error?.message ?? "Не удалось сохранить имя");
+      router.refresh();
+    } catch (cause) {
+      window.alert(cause instanceof Error ? cause.message : "Не удалось сохранить имя");
+    } finally {
+      setSavingSpeaker(null);
+    }
+  };
 
   const filtered = useMemo(() => {
     return segments.filter((segment) => {
@@ -221,6 +257,21 @@ export function TranscriptView({
                     </span>
                     {segment.marked ? (
                       <Highlighter className="size-2.5 text-orange" strokeWidth={2} aria-label="Отмечено" />
+                    ) : null}
+                    {canEdit && recordingId ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void editSpeaker(segment);
+                        }}
+                        disabled={savingSpeaker === segment.index}
+                        className="flex size-4 items-center justify-center rounded-full text-ink-300 opacity-60 transition-opacity hover:text-orange disabled:opacity-30 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+                        aria-label="Изменить говорящего для этой фразы"
+                        title="Изменить говорящего для этой фразы"
+                      >
+                        <Pencil className="size-2.5" strokeWidth={2} />
+                      </button>
                     ) : null}
                   </span>
                   <span className="mt-1 block text-[13.5px] leading-[1.65] text-ink-700 sm:text-[14px]">

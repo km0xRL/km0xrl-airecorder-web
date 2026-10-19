@@ -139,6 +139,7 @@ export interface RecordingStats {
   recordings: number;
   durationS: number;
   audioBytes: number;
+  audioRecordings: number;
   activeShares: number;
   latestAtMs: number | null;
 }

@@ -44,7 +44,7 @@ export function RecordingBody({
 
   return (
     <PlaybackProvider src={audioUrl} duration={recording.durationS} segments={segments} marks={recording.marks}>
-      {hasAudio ? <PlayerBar /> : <NoAudioNotice mode={mode} />}
+      {hasAudio ? <PlayerBar recordingId={recording.id} canEdit={mode === "owner"} /> : <NoAudioNotice mode={mode} />}
 
       {both ? (
         <div className="mt-5 inline-flex rounded-full bg-sunken p-1" role="tablist" aria-label="Содержимое записи">
@@ -90,7 +90,14 @@ export function RecordingBody({
               pdfUrl={pdfUrl}
             />
           ) : (
-            <TranscriptView segments={segments} text={recording.transcript?.text ?? null} hasAudio={hasAudio} />
+            <TranscriptView
+                segments={segments}
+                text={recording.transcript?.text ?? null}
+                hasAudio={hasAudio}
+                canEdit={mode === "owner"}
+                recordingId={recording.id}
+                speakerOverrides={recording.speakerOverrides}
+              />
           )
         ) : hasReport ? (
           <ReportView
@@ -100,7 +107,14 @@ export function RecordingBody({
             pdfUrl={pdfUrl}
           />
         ) : (
-          <TranscriptView segments={segments} text={recording.transcript?.text ?? null} hasAudio={hasAudio} />
+          <TranscriptView
+            segments={segments}
+            text={recording.transcript?.text ?? null}
+            hasAudio={hasAudio}
+            canEdit={mode === "owner"}
+            recordingId={recording.id}
+            speakerOverrides={recording.speakerOverrides}
+          />
         )}
       </div>
     </PlaybackProvider>

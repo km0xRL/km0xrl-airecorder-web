@@ -328,7 +328,13 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
 
 export function updateRecordingFields(
   id: string,
-  patch: { title?: string; tags?: string[] },
+  patch: {
+    title?: string;
+    tags?: string[];
+    speakerNames?: Record<string, string>;
+    speakerOverrides?: Record<string, string>;
+    marks?: Mark[];
+  },
 ): Recording | null {
   const db = getDb();
   const existing = db.prepare("SELECT * FROM recordings WHERE id = ? AND deleted_at_ms IS NULL").get(id) as
@@ -337,11 +343,16 @@ export function updateRecordingFields(
   if (!existing) return null;
   const title = patch.title?.trim() || existing.title;
   const tags = patch.tags ?? parseJson<string[]>(existing.tags_json, []);
+  const speakerNames = patch.speakerNames ?? parseJson<Record<string, string>>(existing.speaker_names_json, {});
+  const speakerOverrides =
+    patch.speakerOverrides ?? parseJson<Record<string, string>>(existing.speaker_overrides_json, {});
+  const marks = (patch.marks ?? parseJson<Mark[]>(existing.marks_json, [])).slice(0, 500);
   const transcript = parseJson<Transcript | null>(existing.transcript_json, null);
   const report = parseJson<MeetingReport | null>(existing.report_json, null);
   const searchText = [
     title,
     tags.join(" "),
+    Object.values(speakerNames).join(" "),
     transcript?.text ?? "",
     report?.summary.join(" ") ?? "",
     report?.decisions.join(" ") ?? "",
@@ -353,14 +364,22 @@ export function updateRecordingFields(
     .replace(/\s+/g, " ")
     .trim();
   const tagsEdited = patch.tags !== undefined ? 1 : existing.tags_edited;
+  const updatedAtMs = Math.max(Date.now(), existing.updated_at_ms + 1);
   db.prepare(
-    "UPDATE recordings SET title = ?, tags_json = ?, tags_edited = ?, search_text = ?, updated_at_ms = ?, seq = ? WHERE id = ?",
+    `UPDATE recordings SET
+      title = ?, tags_json = ?, tags_edited = ?,
+      speaker_names_json = ?, speaker_overrides_json = ?, marks_json = ?,
+      search_text = ?, updated_at_ms = ?, seq = ?
+    WHERE id = ?`,
   ).run(
     title.slice(0, 300),
     JSON.stringify(tags.slice(0, 50)),
     tagsEdited,
+    JSON.stringify(speakerNames),
+    JSON.stringify(speakerOverrides),
+    JSON.stringify(marks),
     searchText,
-    Date.now(),
+    updatedAtMs,
     nextSeq(db),
     id,
   );
@@ -445,10 +464,12 @@ export function getStats(): RecordingStats {
   const recordingStats = db
     .prepare(
       `SELECT COUNT(*) AS count, COALESCE(SUM(duration_s), 0) AS duration,
-              COALESCE(SUM(audio_size), 0) AS bytes, MAX(COALESCE(recorded_at_ms, created_at_ms)) AS latest
+              COALESCE(SUM(audio_size), 0) AS bytes,
+              COALESCE(SUM(CASE WHEN audio_path IS NOT NULL THEN 1 ELSE 0 END), 0) AS audio_count,
+              MAX(COALESCE(recorded_at_ms, created_at_ms)) AS latest
        FROM recordings WHERE deleted_at_ms IS NULL`,
     )
-    .get() as { count: number; duration: number; bytes: number; latest: number | null };
+    .get() as { count: number; duration: number; bytes: number; audio_count: number; latest: number | null };
   const shares = db
     .prepare(
       `SELECT COUNT(*) AS count FROM share_links s
@@ -462,6 +483,7 @@ export function getStats(): RecordingStats {
     recordings: recordingStats.count,
     durationS: recordingStats.duration,
     audioBytes: recordingStats.bytes,
+    audioRecordings: recordingStats.audio_count,
     activeShares: shares.count,
     latestAtMs: recordingStats.latest,
   };

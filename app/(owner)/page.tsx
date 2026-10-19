@@ -81,7 +81,7 @@ export default async function RecordingsPage({
           icon={<HardDrive className="size-3.5" strokeWidth={1.8} />}
           label="Аудио"
           value={formatBytes(stats.audioBytes)}
-          hint="в хранилище"
+          hint={`${stats.audioRecordings} из ${stats.recordings} записей`}
         />
         <StatCard
           icon={<Share2 className="size-3.5" strokeWidth={1.8} />}

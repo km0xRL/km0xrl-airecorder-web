@@ -17,6 +17,8 @@ import { DeleteRecording } from "@/components/DeleteRecording";
 import { KindBadge } from "@/components/KindBadge";
 import { RecordingBody } from "@/components/RecordingBody";
 import { RecordingEditor } from "@/components/RecordingEditor";
+import { SpeakersEditor } from "@/components/SpeakersEditor";
+import { MarksEditor } from "@/components/MarksEditor";
 import { ShareManager, type ShareItem } from "@/components/ShareManager";
 import { TagChip } from "@/components/TagChip";
 import { publicBaseUrl } from "@/lib/config";
@@ -63,6 +65,12 @@ export default async function RecordingPage({ params }: { params: Promise<{ id: 
   const dateMs = recording.recordedAtMs ?? recording.createdAtMs;
   const audioUrl = recording.audio ? `/api/recordings/${id}/audio` : null;
   const pdfUrl = `/api/recordings/${id}/pdf`;
+  const speakerLabels = Array.from(
+    new Set([
+      ...(recording.transcript?.segments ?? []).map((segment) => segment.speaker?.trim() || "Говорящий"),
+      ...Object.keys(recording.speakerNames),
+    ]),
+  );
 
   return (
     <div className="fade-up">
@@ -179,6 +187,12 @@ export default async function RecordingPage({ params }: { params: Promise<{ id: 
             initialTitle={recording.title}
             initialTags={recording.tags}
           />
+          <SpeakersEditor
+            recordingId={recording.id}
+            labels={speakerLabels}
+            initialNames={recording.speakerNames}
+          />
+          <MarksEditor recordingId={recording.id} initialMarks={recording.marks} />
 
           <div className="card-flat p-2">
             <DeleteRecording recordingId={recording.id} />

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Pause, Play, RotateCcw, RotateCw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { BookmarkPlus, Pause, Play, RotateCcw, RotateCw } from "lucide-react";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { formatDuration } from "@/lib/format";
 import { speakerColor } from "@/lib/speakers";
@@ -137,7 +138,13 @@ function Timeline() {
   );
 }
 
-export function PlayerBar() {
+export function PlayerBar({
+  recordingId,
+  canEdit = false,
+}: {
+  recordingId?: string;
+  canEdit?: boolean;
+}) {
   const {
     available,
     currentTime,
@@ -146,14 +153,41 @@ export function PlayerBar() {
     rate,
     error,
     segments,
+    marks,
     activeIndex,
     toggle,
     skip,
     setRate,
   } = usePlayback();
+  const router = useRouter();
+  const [markBusy, setMarkBusy] = useState(false);
 
   const speaker = activeIndex >= 0 ? segments[activeIndex] : null;
   const color = speaker ? speakerColor(speaker.colorIndex) : null;
+
+  const addMark = async () => {
+    if (!recordingId || markBusy) return;
+    const segment = activeIndex >= 0 ? segments[activeIndex] : null;
+    const start = Math.max(0, segment?.start ?? currentTime);
+    const end = Math.max(start, segment?.end ?? currentTime);
+    if (marks.some((mark) => Math.abs(mark.start - start) < 0.05 && Math.abs(mark.end - end) < 0.05)) return;
+    const next = [...marks, { start, end }].sort((a, b) => a.start - b.start || a.end - b.end);
+    setMarkBusy(true);
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marks: next }),
+      });
+      const data = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(data.error?.message ?? "Не удалось поставить метку");
+      router.refresh();
+    } catch (cause) {
+      window.alert(cause instanceof Error ? cause.message : "Не удалось поставить метку");
+    } finally {
+      setMarkBusy(false);
+    }
+  };
 
   if (error) {
     return (
@@ -223,6 +257,18 @@ export function PlayerBar() {
             <RotateCw className="size-[18px]" strokeWidth={1.8} />
             <span className="absolute -bottom-0.5 text-[8px] font-medium">15</span>
           </button>
+          {canEdit && recordingId ? (
+            <button
+              type="button"
+              onClick={() => void addMark()}
+              disabled={!available || markBusy}
+              className="relative flex size-10 items-center justify-center rounded-full text-ink-500 transition-colors hover:bg-orange-tint hover:text-orange disabled:opacity-40"
+              aria-label="Поставить метку на текущую фразу"
+              title="Поставить метку на текущую фразу"
+            >
+              <BookmarkPlus className="size-[18px]" strokeWidth={1.8} />
+            </button>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2.5">
