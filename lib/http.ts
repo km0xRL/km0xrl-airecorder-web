@@ -72,8 +72,39 @@ export class PayloadTooLargeError extends Error {
   }
 }
 
+/**
+ * Публичный origin запроса. За обратным прокси Railway `request.url` может быть
+ * внутренним (http://0.0.0.0:8080), поэтому сначала смотрим forwarded-заголовки.
+ */
+export function requestOrigin(request: Request): string {
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const rawHost = request.headers.get("host")?.trim();
+  const hostHeader =
+    rawHost && !/^(0\.0\.0\.0|127\.0\.0\.1)(:\d+)?$/.test(rawHost) ? rawHost : null;
+  const configured = process.env.PUBLIC_BASE_URL?.trim().replace(/\/+$/, "") ?? "";
+  let configuredHost: string | null = null;
+  let configuredProto: string | null = null;
+  if (configured) {
+    try {
+      const url = new URL(configured);
+      configuredHost = url.host;
+      configuredProto = url.protocol.replace(":", "");
+    } catch {
+      configuredHost = null;
+    }
+  }
+  const host =
+    forwardedHost || hostHeader || configuredHost || new URL(request.url).host;
+  const proto =
+    request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
+    configuredProto ||
+    new URL(request.url).protocol.replace(":", "") ||
+    "http";
+  return `${proto}://${host}`;
+}
+
 export function redirectTo(request: Request, path: string, status = 303): NextResponse {
-  return NextResponse.redirect(new URL(path, request.url), status);
+  return NextResponse.redirect(new URL(path, requestOrigin(request)), status);
 }
 
 export function safeFileName(input: string | null | undefined, fallback = "audio"): string {
@@ -100,5 +131,5 @@ export function contentDispositionAttachment(fileName: string): string {
 export function absoluteUrl(request: Request, path: string): string {
   const base = process.env.PUBLIC_BASE_URL?.trim().replace(/\/+$/, "");
   if (base) return `${base}${path.startsWith("/") ? path : `/${path}`}`;
-  return new URL(path, request.url).toString();
+  return new URL(path, requestOrigin(request)).toString();
 }
