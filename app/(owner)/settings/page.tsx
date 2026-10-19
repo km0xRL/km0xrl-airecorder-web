@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { headers } from "next/headers";
 import {
   CheckCircle2,
@@ -214,6 +215,18 @@ export default async function SettingsPage() {
           </ol>
         </section>
       </div>
+
+      <section className="card-flat mt-4 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[12.5px] font-medium text-ink">Как проходит запись — от телефона до ссылки</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-ink-400">
+            Семь шагов, что видит получатель и как работает синхронизация.
+          </p>
+        </div>
+        <Link href="/help" className="btn btn-outline btn-sm shrink-0">
+          Открыть сценарий
+        </Link>
+      </section>
 
       <section className="card mt-4 overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-hairline px-5 py-3.5">

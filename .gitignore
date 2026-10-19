@@ -13,3 +13,4 @@ data/
 ._*
 *.tmp
 *.tsbuildinfo
+.deploy*

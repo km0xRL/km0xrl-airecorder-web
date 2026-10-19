@@ -38,6 +38,17 @@ interface Manifest {
   segments: ManifestSegment[];
 }
 
+const looksLikeProduction =
+  process.env.NODE_ENV === "production" ||
+  process.env.DATA_DIR === "/data" ||
+  Boolean(process.env.RAILWAY_ENVIRONMENT);
+if (looksLikeProduction && process.env.ALLOW_DEMO_SEED !== "1") {
+  console.error(
+    "Демо-данные в production запрещены. Для осознанного запуска задайте ALLOW_DEMO_SEED=1.",
+  );
+  process.exit(1);
+}
+
 const dataDir = path.resolve(process.env.DATA_DIR || "./data");
 const manifestPath = path.join(dataDir, "demo", "manifest.json");
 if (!fs.existsSync(manifestPath)) {

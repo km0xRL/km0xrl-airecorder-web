@@ -53,10 +53,15 @@ export default async function RecordingsPage({
             Встречи и звонки из Android и Mac. Одна база: аудио, расшифровка, отчёт и теги.
           </p>
         </div>
-        <Link href="/settings" className="btn btn-outline self-start sm:self-auto">
-          Подключить приложение
-          <ArrowUpRight className="size-4" strokeWidth={1.8} />
-        </Link>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <Link href="/help" className="btn btn-ghost btn-sm text-ink-500">
+            Как это работает
+          </Link>
+          <Link href="/settings" className="btn btn-outline">
+            Подключить приложение
+            <ArrowUpRight className="size-4" strokeWidth={1.8} />
+          </Link>
+        </div>
       </div>
 
       <div className="mt-8 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
@@ -149,10 +154,15 @@ export default async function RecordingsPage({
             title="Здесь появятся ваши записи"
             description="Отправьте запись из AI Recorder на Android или Mac — она окажется в этой базе вместе с расшифровкой и отчётом."
           >
-            <Link href="/settings" className="btn btn-primary">
-              Как подключить
-              <ArrowUpRight className="size-4" strokeWidth={1.8} />
-            </Link>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Link href="/settings" className="btn btn-primary">
+                Как подключить
+                <ArrowUpRight className="size-4" strokeWidth={1.8} />
+              </Link>
+              <Link href="/help" className="btn btn-outline">
+                Сценарий работы
+              </Link>
+            </div>
           </EmptyState>
         )}
       </div>
