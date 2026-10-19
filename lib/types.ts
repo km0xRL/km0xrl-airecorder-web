@@ -1,4 +1,13 @@
 export type RecordingKind = "meeting" | "online_call" | "phone_call";
+export type RecordingPeriod = "all" | "day" | "week" | "month";
+export type RecordingMedia = "all" | "audio" | "transcript" | "report";
+export type RecordingSort =
+  | "date_desc"
+  | "date_asc"
+  | "updated_desc"
+  | "duration_desc"
+  | "duration_asc"
+  | "title_asc";
 
 export interface TranscriptSegment {
   start: number;

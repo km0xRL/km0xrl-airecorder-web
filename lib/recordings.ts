@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDb, inTransaction, nextSeq, type RecordingRow, type ShareRow } from "@/lib/db";
 import type { NormalizedIngest } from "@/lib/ingest";
+import { buildSearchText } from "@/lib/search";
 import { randomToken } from "@/lib/crypto";
 import type {
   AudioInfo,
@@ -8,6 +9,9 @@ import type {
   MeetingReport,
   Recording,
   RecordingKind,
+  RecordingMedia,
+  RecordingPeriod,
+  RecordingSort,
   RecordingStats,
   RecordingSummary,
   ShareLink,
@@ -105,20 +109,59 @@ export function shareStatus(share: ShareLink, now = Date.now()): ShareStatus {
 export function listRecordings(options: {
   query?: string | null;
   kind?: RecordingKind | null;
+  period?: RecordingPeriod;
+  media?: RecordingMedia;
+  sort?: RecordingSort;
   limit?: number;
 } = {}): RecordingSummary[] {
   const db = getDb();
+  const now = Date.now();
   const clauses: string[] = ["r.deleted_at_ms IS NULL"];
   const params: (string | number)[] = [];
+
   if (options.kind) {
     clauses.push("r.kind = ?");
     params.push(options.kind);
   }
+
   const query = options.query?.trim();
   if (query) {
-    clauses.push("instr(r.search_text, ?) > 0");
-    params.push(query.toLocaleLowerCase("ru-RU"));
+    const tokens = query
+      .toLocaleLowerCase("ru-RU")
+      .replace(/[«»"']/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 12);
+    for (const token of tokens) {
+      clauses.push("instr(r.search_text, ?) > 0");
+      params.push(token);
+    }
   }
+
+  const period = options.period ?? "all";
+  const days = period === "day" ? 1 : period === "week" ? 7 : period === "month" ? 30 : 0;
+  if (days > 0) {
+    clauses.push("COALESCE(r.recorded_at_ms, r.created_at_ms) >= ?");
+    params.push(now - days * 86_400_000);
+  }
+
+  const media = options.media ?? "all";
+  if (media === "audio") clauses.push("r.audio_path IS NOT NULL");
+  else if (media === "transcript") clauses.push("r.transcript_json IS NOT NULL");
+  else if (media === "report") clauses.push("r.report_json IS NOT NULL");
+
+  const sort = options.sort ?? "date_desc";
+  const orderBy: Record<RecordingSort, string> = {
+    date_desc: "COALESCE(r.recorded_at_ms, r.created_at_ms) DESC, r.created_at_ms DESC",
+    date_asc: "COALESCE(r.recorded_at_ms, r.created_at_ms) ASC, r.created_at_ms ASC",
+    updated_desc: "r.updated_at_ms DESC, COALESCE(r.recorded_at_ms, r.created_at_ms) DESC",
+    duration_desc:
+      "COALESCE(r.duration_s, 0) DESC, COALESCE(r.recorded_at_ms, r.created_at_ms) DESC",
+    duration_asc:
+      "COALESCE(r.duration_s, 0) ASC, COALESCE(r.recorded_at_ms, r.created_at_ms) DESC",
+    title_asc: "r.title COLLATE NOCASE ASC, COALESCE(r.recorded_at_ms, r.created_at_ms) DESC",
+  };
+
   const limit = Math.min(Math.max(options.limit ?? 500, 1), 2000);
   const rows = db
     .prepare(
@@ -129,10 +172,10 @@ export function listRecordings(options: {
             AND (s.expires_at_ms IS NULL OR s.expires_at_ms > ?)) AS share_count
        FROM recordings r
        WHERE ${clauses.join(" AND ")}
-       ORDER BY COALESCE(r.recorded_at_ms, r.created_at_ms) DESC
+       ORDER BY ${orderBy[sort]}
        LIMIT ?`,
     )
-    .all(Date.now(), ...params, limit) as unknown as (RecordingRow & { share_count: number })[];
+    .all(now, ...params, limit) as unknown as (RecordingRow & { share_count: number })[];
   return rows.map(rowToSummary);
 }
 
@@ -240,19 +283,16 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
   const recordedAtMs = input.recordedAtMs ?? existing?.recorded_at_ms ?? now;
   const speakerNames = input.speakerNames;
   const speakerOverrides = input.speakerOverrides;
-  const searchText = [
-    input.title,
-    input.tags.join(" "),
-    transcript?.text ?? "",
-    report?.summary.join(" ") ?? "",
-    report?.decisions.join(" ") ?? "",
-    report?.tasks.map((task) => `${task.title} ${task.assignee ?? ""}`).join(" ") ?? "",
-    report?.markdown ?? "",
-  ]
-    .join("\n")
-    .toLocaleLowerCase("ru-RU")
-    .replace(/\s+/g, " ")
-    .trim();
+  const searchText = buildSearchText({
+    title: input.title,
+    sourceName: input.sourceName,
+    tags: input.tags,
+    transcript,
+    report,
+    speakerNames,
+    speakerOverrides,
+    hints: input.hints,
+  });
 
   inTransaction(db, () => {
     if (existing) {
@@ -349,20 +389,17 @@ export function updateRecordingFields(
   const marks = (patch.marks ?? parseJson<Mark[]>(existing.marks_json, [])).slice(0, 500);
   const transcript = parseJson<Transcript | null>(existing.transcript_json, null);
   const report = parseJson<MeetingReport | null>(existing.report_json, null);
-  const searchText = [
+  const hints = parseJson<Hint[]>(existing.hints_json, []);
+  const searchText = buildSearchText({
     title,
-    tags.join(" "),
-    Object.values(speakerNames).join(" "),
-    transcript?.text ?? "",
-    report?.summary.join(" ") ?? "",
-    report?.decisions.join(" ") ?? "",
-    report?.tasks.map((task) => task.title).join(" ") ?? "",
-    report?.markdown ?? "",
-  ]
-    .join("\n")
-    .toLocaleLowerCase("ru-RU")
-    .replace(/\s+/g, " ")
-    .trim();
+    sourceName: existing.source_name,
+    tags,
+    transcript,
+    report,
+    speakerNames,
+    speakerOverrides,
+    hints,
+  });
   const tagsEdited = patch.tags !== undefined ? 1 : existing.tags_edited;
   const updatedAtMs = Math.max(Date.now(), existing.updated_at_ms + 1);
   db.prepare(

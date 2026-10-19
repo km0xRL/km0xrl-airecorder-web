@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { paths } from "@/lib/config";
+import { buildSearchText } from "@/lib/search";
+import type { Hint, MeetingReport, Transcript } from "@/lib/types";
 
 export interface RecordingRow {
   id: string;
@@ -129,6 +131,51 @@ function migrate(db: Db): void {
         SELECT 'seq', COALESCE(MAX(seq), 0) FROM recordings;
       PRAGMA user_version = 2;
     `);
+  }
+
+  if (version < 3) {
+    // Пересобрать поисковый текст: добавляем говорящих, исходное имя файла, подсказки и теги отчёта.
+    const rows = db.prepare(
+      `SELECT id, title, source_name, tags_json, transcript_json, report_json,
+              speaker_names_json, speaker_overrides_json, hints_json
+       FROM recordings`,
+    ).all() as unknown as {
+      id: string;
+      title: string;
+      source_name: string | null;
+      tags_json: string;
+      transcript_json: string | null;
+      report_json: string | null;
+      speaker_names_json: string;
+      speaker_overrides_json: string;
+      hints_json: string;
+    }[];
+    const update = db.prepare("UPDATE recordings SET search_text = ? WHERE id = ?");
+    for (const row of rows) {
+      update.run(
+        buildSearchText({
+          title: row.title,
+          sourceName: row.source_name,
+          tags: parseJson<string[]>(row.tags_json, []),
+          transcript: parseJson<Transcript | null>(row.transcript_json, null),
+          report: parseJson<MeetingReport | null>(row.report_json, null),
+          speakerNames: parseJson<Record<string, string>>(row.speaker_names_json, {}),
+          speakerOverrides: parseJson<Record<string, string>>(row.speaker_overrides_json, {}),
+          hints: parseJson<Hint[]>(row.hints_json, []),
+        }),
+        row.id,
+      );
+    }
+    db.exec("PRAGMA user_version = 3");
+  }
+}
+
+function parseJson<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
   }
 }
 
