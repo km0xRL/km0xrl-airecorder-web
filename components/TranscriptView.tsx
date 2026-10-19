@@ -211,7 +211,15 @@ export function TranscriptView({
       </div>
 
       {filtered.length ? (
-        <div className="max-h-none divide-y divide-hairline/70 overflow-visible px-1.5 py-2 sm:px-2.5">
+        <div
+          className="max-h-none divide-y divide-hairline/70 overflow-visible px-1.5 py-2 sm:px-2.5"
+          onWheel={() => {
+            if (follow) setFollow(false);
+          }}
+          onTouchMove={() => {
+            if (follow) setFollow(false);
+          }}
+        >
           {filtered.map((segment) => {
             const active = segment.index === activeIndex;
             const color = speakerColor(segment.colorIndex);
@@ -287,6 +295,24 @@ export function TranscriptView({
           Ничего не нашлось. Попробуйте другое слово или сбросьте фильтр говорящего.
         </div>
       )}
+
+      {hasAudio && !follow && activeIndex >= 0 && !normalizedQuery && !speaker ? (
+        <div className="pointer-events-none fixed bottom-6 right-4 z-30 sm:right-6">
+          <button
+            type="button"
+            onClick={() => {
+              setFollow(true);
+              refs.current[activeIndex]?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-2 text-[11px] font-medium text-white shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)] transition-transform hover:scale-[1.02] active:scale-95"
+            aria-label="Вернуться к текущей фразе"
+            title="Вернуться к текущей фразе и снова следить за звуком"
+          >
+            <LocateFixed className="size-3.5" strokeWidth={2} />
+            К текущей фразе
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

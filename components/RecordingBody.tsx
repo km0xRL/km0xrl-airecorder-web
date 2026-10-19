@@ -44,7 +44,13 @@ export function RecordingBody({
 
   return (
     <PlaybackProvider src={audioUrl} duration={recording.durationS} segments={segments} marks={recording.marks}>
-      {hasAudio ? <PlayerBar recordingId={recording.id} canEdit={mode === "owner"} /> : <NoAudioNotice mode={mode} />}
+      {hasAudio ? (
+        <div className="sticky top-16 z-30 -mx-1 mb-3 rounded-2xl bg-canvas/90 px-1 py-1 backdrop-blur-xl">
+          <PlayerBar recordingId={recording.id} canEdit={mode === "owner"} />
+        </div>
+      ) : (
+        <NoAudioNotice mode={mode} />
+      )}
 
       {both ? (
         <div className="mt-5 inline-flex rounded-full bg-sunken p-1" role="tablist" aria-label="Содержимое записи">
