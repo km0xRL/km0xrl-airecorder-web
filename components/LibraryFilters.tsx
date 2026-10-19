@@ -17,6 +17,7 @@ interface FilterState {
   kind: RecordingKind | null;
   period: RecordingPeriod;
   media: RecordingMedia;
+  speaker: string;
   sort: RecordingSort;
 }
 
@@ -48,6 +49,8 @@ const SORT_OPTIONS: { value: RecordingSort; label: string }[] = [
   { value: "duration_desc", label: "Сначала долгие" },
   { value: "duration_asc", label: "Сначала короткие" },
   { value: "title_asc", label: "По названию А–Я" },
+  { value: "speaker_asc", label: "По говорящему А–Я" },
+  { value: "speaker_desc", label: "По говорящему Я–А" },
 ];
 
 function Select({
@@ -84,14 +87,18 @@ export function LibraryFilters({
   kind,
   period,
   media,
+  speaker,
   sort,
+  speakers,
   count,
 }: {
   query: string;
   kind: RecordingKind | null;
   period: RecordingPeriod;
   media: RecordingMedia;
+  speaker: string;
   sort: RecordingSort;
+  speakers: { name: string; count: number }[];
   count: number;
 }) {
   const router = useRouter();
@@ -102,15 +109,18 @@ export function LibraryFilters({
     setValue(query);
   }, [query]);
 
-  const hasFilters = Boolean(query || kind || period !== "all" || media !== "all" || sort !== "date_desc");
+  const hasFilters = Boolean(
+    query || kind || period !== "all" || media !== "all" || speaker || sort !== "date_desc",
+  );
 
   const apply = (patch: Partial<FilterState>) => {
-    const next: FilterState = { query: value, kind, period, media, sort, ...patch };
+    const next: FilterState = { query: value, kind, period, media, speaker, sort, ...patch };
     const params = new URLSearchParams();
     if (next.query.trim()) params.set("q", next.query.trim());
     if (next.kind) params.set("kind", next.kind);
     if (next.period !== "all") params.set("period", next.period);
     if (next.media !== "all") params.set("media", next.media);
+    if (next.speaker) params.set("speaker", next.speaker);
     if (next.sort !== "date_desc") params.set("sort", next.sort);
     startTransition(() => {
       router.push(params.toString() ? `/?${params.toString()}` : "/");
@@ -157,7 +167,7 @@ export function LibraryFilters({
         ) : null}
       </form>
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <Select
           label="Тип"
           value={kind ?? ""}
@@ -175,6 +185,23 @@ export function LibraryFilters({
           value={media}
           options={MEDIA_OPTIONS}
           onChange={(next) => apply({ media: next as RecordingMedia })}
+        />
+        <Select
+          label="Говорящий"
+          value={speaker}
+          options={[
+            { value: "", label: "Все говорящие" },
+            ...(speakers.some((item) => item.name === speaker)
+              ? speakers
+              : speaker
+                ? [...speakers, { name: speaker, count: 0 }]
+                : speakers
+            ).map((item) => ({
+              value: item.name,
+              label: item.count ? `${item.name} (${item.count})` : item.name,
+            })),
+          ]}
+          onChange={(next) => apply({ speaker: next })}
         />
         <Select
           label="Сортировка"

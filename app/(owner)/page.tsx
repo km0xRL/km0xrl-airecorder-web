@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LibraryFilters } from "@/components/LibraryFilters";
 import { RecordingList } from "@/components/RecordingList";
 import { formatBytes, formatDateRu, formatHoursTotal } from "@/lib/format";
-import { getStats, listRecordings } from "@/lib/recordings";
+import { getStats, listRecordings, listSpeakers } from "@/lib/recordings";
 import type {
   RecordingKind,
   RecordingMedia,
@@ -22,6 +22,7 @@ export default async function RecordingsPage({
     kind?: string;
     period?: string;
     media?: string;
+    speaker?: string;
     sort?: string;
   }>;
 }) {
@@ -39,19 +40,23 @@ export default async function RecordingsPage({
     params.media === "audio" || params.media === "transcript" || params.media === "report"
       ? params.media
       : "all";
+  const speaker = (params.speaker ?? "").trim();
   const sort: RecordingSort =
     params.sort === "date_asc" ||
     params.sort === "updated_desc" ||
     params.sort === "duration_desc" ||
     params.sort === "duration_asc" ||
-    params.sort === "title_asc"
+    params.sort === "title_asc" ||
+    params.sort === "speaker_asc" ||
+    params.sort === "speaker_desc"
       ? params.sort
       : "date_desc";
 
   const [recordings, stats] = [
-    listRecordings({ query, kind, period, media, sort }),
+    listRecordings({ query, kind, period, media, speaker, sort }),
     getStats(),
   ];
+  const speakers = listSpeakers();
   const hasAny = stats.recordings > 0;
   const grouped = sort === "date_desc" || sort === "date_asc";
 
@@ -112,7 +117,9 @@ export default async function RecordingsPage({
         kind={kind}
         period={period}
         media={media}
+        speaker={speaker}
         sort={sort}
+        speakers={speakers}
         count={recordings.length}
       />
 

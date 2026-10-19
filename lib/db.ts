@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { paths } from "@/lib/config";
-import { buildSearchText } from "@/lib/search";
+import { buildSearchText, primarySpeakerName } from "@/lib/search";
 import type { Hint, MeetingReport, Transcript } from "@/lib/types";
 
 export interface RecordingRow {
@@ -28,6 +28,7 @@ export interface RecordingRow {
   audio_sha256: string | null;
   audio_name: string | null;
   tags_edited: number;
+  primary_speaker: string;
   voice_named_json: string;
   seq: number;
   search_text: string;
@@ -167,6 +168,31 @@ function migrate(db: Db): void {
       );
     }
     db.exec("PRAGMA user_version = 3");
+  }
+
+  if (version < 4) {
+    db.exec("ALTER TABLE recordings ADD COLUMN primary_speaker TEXT NOT NULL DEFAULT ''");
+    const rows = db.prepare(
+      `SELECT id, transcript_json, speaker_names_json, speaker_overrides_json
+       FROM recordings`,
+    ).all() as unknown as {
+      id: string;
+      transcript_json: string | null;
+      speaker_names_json: string;
+      speaker_overrides_json: string;
+    }[];
+    const update = db.prepare("UPDATE recordings SET primary_speaker = ? WHERE id = ?");
+    for (const row of rows) {
+      update.run(
+        primarySpeakerName(
+          parseJson<Transcript | null>(row.transcript_json, null),
+          parseJson<Record<string, string>>(row.speaker_names_json, {}),
+          parseJson<Record<string, string>>(row.speaker_overrides_json, {}),
+        ),
+        row.id,
+      );
+    }
+    db.exec("PRAGMA user_version = 4");
   }
 }
 

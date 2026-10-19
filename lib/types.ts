@@ -7,7 +7,9 @@ export type RecordingSort =
   | "updated_desc"
   | "duration_desc"
   | "duration_asc"
-  | "title_asc";
+  | "title_asc"
+  | "speaker_asc"
+  | "speaker_desc";
 
 export interface TranscriptSegment {
   start: number;
@@ -106,6 +108,7 @@ export interface RecordingSummary {
   recordedAtMs: number | null;
   durationS: number | null;
   tags: string[];
+  speakers: string[];
   originDevice: string | null;
   hasAudio: boolean;
   hasTranscript: boolean;

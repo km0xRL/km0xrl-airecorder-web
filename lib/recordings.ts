@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDb, inTransaction, nextSeq, type RecordingRow, type ShareRow } from "@/lib/db";
 import type { NormalizedIngest } from "@/lib/ingest";
-import { buildSearchText } from "@/lib/search";
+import { buildSearchText, primarySpeakerName } from "@/lib/search";
 import { randomToken } from "@/lib/crypto";
 import type {
   AudioInfo,
@@ -68,6 +68,18 @@ export function rowToRecording(row: RecordingRow): Recording {
   };
 }
 
+const GENERIC_SPEAKER = /^(Спикер|Говорящий)\s*\d*$/i;
+
+function namedSpeakers(row: Pick<RecordingRow, "speaker_names_json" | "speaker_overrides_json">): string[] {
+  const names = parseJson<Record<string, string>>(row.speaker_names_json, {});
+  const overrides = parseJson<Record<string, string>>(row.speaker_overrides_json, {});
+  return [...new Set(
+    [...Object.values(names), ...Object.values(overrides)]
+      .map((name) => name.trim())
+      .filter((name) => name && !GENERIC_SPEAKER.test(name)),
+  )];
+}
+
 export function rowToSummary(row: RecordingRow & { share_count?: number }): RecordingSummary {
   return {
     id: row.id,
@@ -77,6 +89,7 @@ export function rowToSummary(row: RecordingRow & { share_count?: number }): Reco
     recordedAtMs: row.recorded_at_ms,
     durationS: row.duration_s,
     tags: parseJson<string[]>(row.tags_json, []),
+    speakers: namedSpeakers(row),
     originDevice: row.origin_device,
     hasAudio: Boolean(row.audio_path),
     hasTranscript: Boolean(row.transcript_json),
@@ -111,6 +124,7 @@ export function listRecordings(options: {
   kind?: RecordingKind | null;
   period?: RecordingPeriod;
   media?: RecordingMedia;
+  speaker?: string | null;
   sort?: RecordingSort;
   limit?: number;
 } = {}): RecordingSummary[] {
@@ -150,6 +164,12 @@ export function listRecordings(options: {
   else if (media === "transcript") clauses.push("r.transcript_json IS NOT NULL");
   else if (media === "report") clauses.push("r.report_json IS NOT NULL");
 
+  const speaker = options.speaker?.trim();
+  if (speaker) {
+    clauses.push("(instr(r.speaker_names_json, ?) > 0 OR instr(r.speaker_overrides_json, ?) > 0)");
+    params.push(speaker, speaker);
+  }
+
   const sort = options.sort ?? "date_desc";
   const orderBy: Record<RecordingSort, string> = {
     date_desc: "COALESCE(r.recorded_at_ms, r.created_at_ms) DESC, r.created_at_ms DESC",
@@ -160,6 +180,10 @@ export function listRecordings(options: {
     duration_asc:
       "COALESCE(r.duration_s, 0) ASC, COALESCE(r.recorded_at_ms, r.created_at_ms) DESC",
     title_asc: "r.title COLLATE NOCASE ASC, COALESCE(r.recorded_at_ms, r.created_at_ms) DESC",
+    speaker_asc:
+      "CASE WHEN r.primary_speaker = '' THEN 1 ELSE 0 END, r.primary_speaker COLLATE NOCASE ASC, COALESCE(r.recorded_at_ms, r.created_at_ms) DESC",
+    speaker_desc:
+      "CASE WHEN r.primary_speaker = '' THEN 1 ELSE 0 END, r.primary_speaker COLLATE NOCASE DESC, COALESCE(r.recorded_at_ms, r.created_at_ms) DESC",
   };
 
   const limit = Math.min(Math.max(options.limit ?? 500, 1), 2000);
@@ -177,6 +201,24 @@ export function listRecordings(options: {
     )
     .all(now, ...params, limit) as unknown as (RecordingRow & { share_count: number })[];
   return rows.map(rowToSummary);
+}
+
+export function listSpeakers(): { name: string; count: number }[] {
+  const rows = getDb()
+    .prepare(
+      "SELECT speaker_names_json, speaker_overrides_json FROM recordings WHERE deleted_at_ms IS NULL",
+    )
+    .all() as unknown as Pick<RecordingRow, "speaker_names_json" | "speaker_overrides_json">[];
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    for (const name of namedSpeakers(row)) {
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"))
+    .slice(0, 100);
 }
 
 export function listRecordingsForSync(
@@ -293,6 +335,7 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
     speakerOverrides,
     hints: input.hints,
   });
+  const primarySpeaker = primarySpeakerName(transcript, speakerNames, speakerOverrides);
 
   inTransaction(db, () => {
     if (existing) {
@@ -301,7 +344,7 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
           title = ?, kind = ?, source_name = ?, origin_device = ?, model = ?,
           recorded_at_ms = ?, duration_s = ?, tags_json = ?, tags_edited = ?,
           voice_named_json = ?, speaker_names_json = ?,
-          speaker_overrides_json = ?, transcript_json = ?, report_json = ?,
+          speaker_overrides_json = ?, primary_speaker = ?, transcript_json = ?, report_json = ?,
           marks_json = ?, hints_json = ?, search_text = ?, updated_at_ms = ?, seq = ?,
           deleted_at_ms = NULL
         WHERE id = ?`,
@@ -318,6 +361,7 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
         JSON.stringify(input.voiceNamed),
         JSON.stringify(speakerNames),
         JSON.stringify(speakerOverrides),
+        primarySpeaker,
         transcript ? JSON.stringify(transcript) : null,
         report ? JSON.stringify(report) : null,
         JSON.stringify(input.marks),
@@ -332,9 +376,9 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
         `INSERT INTO recordings (
           id, client_id, title, kind, source_name, origin_device, model,
           recorded_at_ms, duration_s, tags_json, tags_edited, voice_named_json,
-          speaker_names_json, speaker_overrides_json, transcript_json, report_json,
+          speaker_names_json, speaker_overrides_json, primary_speaker, transcript_json, report_json,
           marks_json, hints_json, search_text, created_at_ms, updated_at_ms, seq
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         randomUUID(),
         input.clientId,
@@ -350,6 +394,7 @@ export function upsertIngest(clientId: string, input: NormalizedIngest): UpsertR
         JSON.stringify(input.voiceNamed),
         JSON.stringify(speakerNames),
         JSON.stringify(speakerOverrides),
+        primarySpeaker,
         transcript ? JSON.stringify(transcript) : null,
         report ? JSON.stringify(report) : null,
         JSON.stringify(input.marks),
@@ -390,6 +435,7 @@ export function updateRecordingFields(
   const transcript = parseJson<Transcript | null>(existing.transcript_json, null);
   const report = parseJson<MeetingReport | null>(existing.report_json, null);
   const hints = parseJson<Hint[]>(existing.hints_json, []);
+  const primarySpeaker = primarySpeakerName(transcript, speakerNames, speakerOverrides);
   const searchText = buildSearchText({
     title,
     sourceName: existing.source_name,
@@ -405,7 +451,7 @@ export function updateRecordingFields(
   db.prepare(
     `UPDATE recordings SET
       title = ?, tags_json = ?, tags_edited = ?,
-      speaker_names_json = ?, speaker_overrides_json = ?, marks_json = ?,
+      speaker_names_json = ?, speaker_overrides_json = ?, primary_speaker = ?, marks_json = ?,
       search_text = ?, updated_at_ms = ?, seq = ?
     WHERE id = ?`,
   ).run(
@@ -414,6 +460,7 @@ export function updateRecordingFields(
     tagsEdited,
     JSON.stringify(speakerNames),
     JSON.stringify(speakerOverrides),
+    primarySpeaker,
     JSON.stringify(marks),
     searchText,
     updatedAtMs,

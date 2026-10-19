@@ -74,6 +74,11 @@ function RecordingRow({
           {item.tags.slice(0, 3).map((tag) => (
             <TagChip key={tag} tag={tag} className="hidden sm:inline-flex" />
           ))}
+          {item.speakers.length ? (
+            <span className="hidden max-w-[220px] truncate text-[11px] text-ink-300 md:inline">
+              {item.speakers.slice(0, 2).join(", ")}
+            </span>
+          ) : null}
           <span className="mono text-[10px] text-ink-300 sm:hidden">
             {item.recordedAtMs ? formatTimeRu(item.recordedAtMs) : "—"}
           </span>

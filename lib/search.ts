@@ -36,3 +36,28 @@ export function buildSearchText(fields: SearchTextFields): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+
+const GENERIC_SPEAKER = /^(Спикер|Говорящий)\s*\d*$/i;
+
+/** Первый осмысленный говорящий записи: имя из карты, точечная поправка или непустой label. */
+export function primarySpeakerName(
+  transcript: Transcript | null | undefined,
+  speakerNames: Record<string, string> = {},
+  speakerOverrides: Record<string, string> = {},
+): string {
+  const segments = transcript?.segments ?? [];
+  for (let index = 0; index < segments.length; index += 1) {
+    const override = speakerOverrides[String(index)]?.trim();
+    if (override) return override.slice(0, 200);
+    const label = segments[index]?.speaker?.trim();
+    if (!label) continue;
+    const named = speakerNames[label]?.trim();
+    if (named) return named.slice(0, 200);
+    if (!GENERIC_SPEAKER.test(label)) return label.slice(0, 200);
+  }
+  const firstNamed = Object.values(speakerNames)
+    .map((name) => name.trim())
+    .find(Boolean);
+  return firstNamed?.slice(0, 200) ?? "";
+}
