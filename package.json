@@ -1,0 +1,47 @@
+{
+  "name": "km0xrl-airecorder-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Единая база записей AI Recorder: просмотр, расшифровка, отчёт и ссылки с паролем",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "hash-password": "node scripts/hash-password.mjs",
+    "seed-demo": "tsx scripts/seed-demo.mts",
+    "ingest-demo": "tsx scripts/ingest-demo.ts",
+    "demo:audio": "node scripts/make-demo-audio.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "lucide-react": "^0.545.0",
+    "music-metadata": "^11.9.0",
+    "next": "^16.4.2",
+    "pdfkit": "^0.17.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/node": "^24.9.2",
+    "@types/pdfkit": "^0.17.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "playwright-core": "1.55.0",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

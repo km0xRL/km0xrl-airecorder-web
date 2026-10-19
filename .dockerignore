@@ -1,0 +1,14 @@
+node_modules
+.next
+data
+screenshots
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+*.log
+._*
+docs
+tests
+README.md
