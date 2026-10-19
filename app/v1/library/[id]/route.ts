@@ -41,7 +41,7 @@ export async function PUT(
       data?: unknown;
     };
     const updatedAtMs = Number(input.updated_at_ms);
-    if (!Number.isFinite(updatedAtMs) || updatedAtMs <= 0) {
+    if (!Number.isFinite(updatedAtMs) || updatedAtMs < 0) {
       return apiError(400, "bad_updated_at", "updated_at_ms — миллисекунды эпохи");
     }
     const deleted = input.deleted === true;
