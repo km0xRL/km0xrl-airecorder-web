@@ -40,3 +40,21 @@ export function ingestConfigured(): boolean {
 export function publicBaseUrl(): string {
   return config.publicBaseUrl;
 }
+
+/** Сервис, который умеет /v1/ask (Claude). Ключ Anthropic не покидает этот сервис. */
+export function askServiceConfig(): { baseUrl: string; token: string } | null {
+  const baseUrl = (process.env.TRANSCRIBE_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  const token = (process.env.TRANSCRIBE_TOKEN ?? "").trim();
+  if (!baseUrl || !token) return null;
+  try {
+    const url = new URL(baseUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  } catch {
+    return null;
+  }
+  return { baseUrl, token };
+}
+
+export function askConfigured(): boolean {
+  return askServiceConfig() != null;
+}

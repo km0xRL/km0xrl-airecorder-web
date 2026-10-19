@@ -9,6 +9,7 @@ import {
   Download,
   FileDown,
   HardDrive,
+  MessageCircleQuestion,
   Mic2,
   Share2,
   Smartphone,
@@ -119,6 +120,10 @@ export default async function RecordingPage({ params }: { params: Promise<{ id: 
             <FileDown className="size-3.5" strokeWidth={1.9} />
             PDF
           </a>
+          <Link href={`/ask?recording=${id}`} className="btn btn-outline btn-sm">
+            <MessageCircleQuestion className="size-3.5" strokeWidth={1.9} />
+            Спросить
+          </Link>
           {audioUrl ? (
             <a href={`${audioUrl}?download=1`} className="btn btn-ghost btn-sm text-ink-400">
               <Download className="size-3.5" strokeWidth={1.9} />

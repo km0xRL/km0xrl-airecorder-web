@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, Clock3, HardDrive, Mic, Share2 } from "lucide-react";
+import { ArrowUpRight, Clock3, HardDrive, MessageCircleQuestion, Mic, Share2 } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 import { LibraryFilters } from "@/components/LibraryFilters";
 import { RecordingList } from "@/components/RecordingList";
@@ -75,6 +75,10 @@ export default async function RecordingsPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <Link href="/ask" className="btn btn-primary btn-sm">
+            <MessageCircleQuestion className="size-3.5" strokeWidth={1.9} />
+            Спросить
+          </Link>
           <Link href="/help" className="btn btn-ghost btn-sm text-ink-500">
             Как это работает
           </Link>
