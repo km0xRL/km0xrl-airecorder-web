@@ -186,7 +186,12 @@ export default async function RecordingPage({ params }: { params: Promise<{ id: 
             </div>
           </div>
 
-          <ShareManager recordingId={recording.id} initialShares={shares} baseUrl={base} />
+          <ShareManager
+            recordingId={recording.id}
+            initialShares={shares}
+            baseUrl={base}
+            recordingTitle={recording.title}
+          />
           <RecordingEditor
             recordingId={recording.id}
             initialTitle={recording.title}

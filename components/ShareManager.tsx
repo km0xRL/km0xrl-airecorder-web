@@ -14,6 +14,7 @@ import {
   Ban,
 } from "lucide-react";
 import { CopyButton } from "@/components/CopyButton";
+import { ShareLinkButton } from "@/components/ShareLinkButton";
 import { formatDateRu, formatDateTimeRu, plural } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import type { ShareStatus } from "@/lib/types";
@@ -79,10 +80,12 @@ export function ShareManager({
   recordingId,
   initialShares,
   baseUrl,
+  recordingTitle,
 }: {
   recordingId: string;
   initialShares: ShareItem[];
   baseUrl: string;
+  recordingTitle: string;
 }) {
   const [shares, setShares] = useState<ShareItem[]>(initialShares);
   const [origin, setOrigin] = useState(baseUrl);
@@ -277,6 +280,11 @@ export function ShareManager({
             ) : (
               <p className="mono text-[9.5px] text-ink-400">бессрочная ссылка</p>
             )}
+            <ShareLinkButton
+              url={created.url}
+              title={recordingTitle}
+              className="w-full border-orange/20 bg-white/70"
+            />
           </div>
         </div>
       ) : null}
@@ -379,6 +387,12 @@ export function ShareManager({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5">
+                    <ShareLinkButton
+                      url={displayUrl(share.url)}
+                      title={recordingTitle}
+                      label="Поделиться ссылкой"
+                      iconOnly
+                    />
                     <CopyButton value={displayUrl(share.url)} label="Ссылка" iconOnly />
                     {share.status !== "revoked" ? (
                       <button
